@@ -1,0 +1,51 @@
+CREATE TABLE IF NOT EXISTS workers (
+  id SERIAL PRIMARY KEY,
+  address TEXT NOT NULL,
+  worker_name TEXT NOT NULL DEFAULT 'default',
+  hashrate REAL NOT NULL DEFAULT 0,
+  valid_shares INTEGER NOT NULL DEFAULT 0,
+  invalid_shares INTEGER NOT NULL DEFAULT 0,
+  last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  mode TEXT NOT NULL DEFAULT 'pplns',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS address_worker_idx ON workers (address, worker_name);
+
+CREATE TABLE IF NOT EXISTS shares (
+  id SERIAL PRIMARY KEY,
+  worker_address TEXT NOT NULL,
+  worker_name TEXT NOT NULL DEFAULT 'default',
+  job_id TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  difficulty REAL NOT NULL DEFAULT 1,
+  valid BOOLEAN NOT NULL DEFAULT TRUE,
+  block_height INTEGER,
+  mode TEXT NOT NULL DEFAULT 'pplns',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS blocks (
+  id SERIAL PRIMARY KEY,
+  height INTEGER NOT NULL,
+  hash TEXT NOT NULL UNIQUE,
+  reward BIGINT NOT NULL DEFAULT 0,
+  finder_address TEXT NOT NULL,
+  found_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+  mode TEXT NOT NULL DEFAULT 'pplns',
+  dev_fee BIGINT NOT NULL DEFAULT 0,
+  txid TEXT,
+  submit_result TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS payouts (
+  id SERIAL PRIMARY KEY,
+  address TEXT NOT NULL,
+  amount BIGINT NOT NULL,
+  txid TEXT,
+  block_id INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

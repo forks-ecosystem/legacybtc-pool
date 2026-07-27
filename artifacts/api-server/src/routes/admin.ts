@@ -1,0 +1,152 @@
+import { Router, type IRouter, type Request, type Response } from "express";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { writeFile, access } from "node:fs/promises";
+import path from "node:path";
+import { isConfigured, setupAdmin, verifyLogin, verifySession, logout } from "../lib/admin-auth";
+
+const execAsync = promisify(execFile);
+const ENV_PATH = path.resolve(process.cwd(), "config", "pool.env");
+
+const router: IRouter = Router();
+
+function authMiddleware(req: Request, res: Response, next: () => void): void {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  verifySession(token).then((valid) => {
+    if (valid) {
+      next();
+    } else {
+      res.status(401).json({ error: "Invalid session" });
+    }
+  });
+}
+
+router.get("/admin/status", async (_req, res) => {
+  const configured = await isConfigured();
+  res.json({ configured });
+});
+
+router.post("/admin/setup", async (req, res) => {
+  if (await isConfigured()) {
+    res.status(400).json({ error: "Admin already configured" });
+    return;
+  }
+  const { login, password } = req.body;
+  if (!login || !password || password.length < 6) {
+    res.status(400).json({ error: "Login required, password min 6 characters" });
+    return;
+  }
+  const token = await setupAdmin(login, password);
+  res.json({ token });
+});
+
+router.post("/admin/login", async (req, res) => {
+  const { login, password } = req.body;
+  if (!login || !password) {
+    res.status(400).json({ error: "Login and password required" });
+    return;
+  }
+  const token = await verifyLogin(login, password);
+  if (token) {
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: "Invalid credentials" });
+  }
+});
+
+router.post("/admin/logout", authMiddleware, async (req, res) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  await logout(token);
+  res.json({ ok: true });
+});
+
+function maskDbUrl(url: string): string {
+  return url.replace(/:\/\/[^:]+:([^@]+)@/, (m, p) => m.replace(p, "****"));
+}
+
+router.get("/admin/dashboard", authMiddleware, async (_req, res) => {
+  const env = process.env;
+  res.json({
+    PORT: env["PORT"] ?? "",
+    DATABASE_URL: maskDbUrl(env["DATABASE_URL"] ?? ""),
+    DEV_WALLET: env["DEV_WALLET"] ?? "",
+    DEV_FEE: env["DEV_FEE"] ?? "",
+    DEV_FEE_ADDRESS: env["DEV_FEE_ADDRESS"] ?? "",
+    NODE_RPC_HOST: env["NODE_RPC_HOST"] ?? "",
+    NODE_RPC_PORT: env["NODE_RPC_PORT"] ?? "",
+    NODE_RPC_COOKIE: env["NODE_RPC_COOKIE"] ?? "",
+    URL_EXPLORER: env["URL_EXPLORER"] ?? "",
+  });
+});
+
+const SERVICES: Record<string, string> = {
+  node: "lbtc-legacycoind",
+  explorer: "legacycoin-explorer",
+  pool: "legacybtc-pool",
+};
+
+async function systemctl(action: string, unit: string): Promise<{ ok: boolean; output: string }> {
+  try {
+    const { stdout, stderr } = await execAsync("sudo", ["systemctl", action, unit]);
+    return { ok: true, output: stdout || stderr };
+  } catch (err: any) {
+    return { ok: false, output: err.stderr || err.message };
+  }
+}
+
+router.get("/admin/services", authMiddleware, async (_req, res) => {
+  const result: Record<string, any> = {};
+  for (const [key, unit] of Object.entries(SERVICES)) {
+    const { stdout } = await execAsync("sudo", ["systemctl", "is-active", unit]).catch(() => ({ stdout: "inactive" }));
+    result[key] = { name: unit, status: stdout.trim() };
+  }
+  res.json(result);
+});
+
+router.post("/admin/services/:name/:action", authMiddleware, async (req, res) => {
+  const name = req.params.name as string;
+  const action = req.params.action as string;
+  const unit = SERVICES[name];
+  if (!unit || !["start", "stop", "restart"].includes(action)) {
+    res.status(400).json({ error: "Invalid service or action" });
+    return;
+  }
+  const result = await systemctl(action, unit);
+  res.json(result);
+});
+
+router.get("/admin/config", authMiddleware, async (_req, res) => {
+  const env = process.env;
+  const raw: Record<string, string> = {};
+  const keys = ["PORT", "DATABASE_URL", "DEV_WALLET", "DEV_FEE", "DEV_FEE_ADDRESS",
+    "NODE_RPC_HOST", "NODE_RPC_PORT", "NODE_RPC_USER", "NODE_RPC_PASS", "NODE_RPC_COOKIE", "URL_EXPLORER",
+    "ADMIN_LOGIN", "ADMIN_PASSWORD"];
+  for (const k of keys) raw[k] = env[k] ?? "";
+  res.json(raw);
+});
+
+router.post("/admin/config", authMiddleware, async (req, res) => {
+  const allowed = new Set(["PORT", "DATABASE_URL", "DEV_WALLET", "DEV_FEE", "DEV_FEE_ADDRESS",
+    "NODE_RPC_HOST", "NODE_RPC_PORT", "NODE_RPC_USER", "NODE_RPC_PASS", "NODE_RPC_COOKIE", "URL_EXPLORER"]);
+  const lines: string[] = [];
+  for (const [key, val] of Object.entries(req.body)) {
+    if (allowed.has(key) && typeof val === "string") {
+      lines.push(`${key}=${val}`);
+    }
+  }
+  lines.push("# Generated by admin panel");
+  try {
+    await writeFile(ENV_PATH, lines.join("\n") + "\n", "utf-8");
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

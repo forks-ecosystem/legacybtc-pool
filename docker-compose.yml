@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: btcpool
+      POSTGRES_PASSWORD: btcpass123
+      POSTGRES_DB: btc_pool
+    ports:
+      - "5433:5432"
+    networks:
+      - legacybtc-pool
+    volumes:
+      - /home/coin/legacybtc-pool/postgresql-data:/var/lib/postgresql/data
+      - ./docker-init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U btcpool -d btc_pool"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgresql://btcpool:btcpass123@127.0.0.1:5433/btc_pool
+      DEV_WALLET: "${DEV_WALLET:-LiLaCdP4rdtCp7kBtxTe9HyTcZjjDyjS7U}"
+      DEV_FEE_ADDRESS: "${DEV_FEE_ADDRESS:-LXpca23xLyUbsEr3byCZFJyrQ7dYBGXSm3}"
+      NODE_RPC_HOST: "127.0.0.1"
+      NODE_RPC_PORT: "19556"
+      NODE_RPC_USER: "coin"
+      NODE_RPC_PASS: "coin"
+      PPLNS_WINDOW: "100000"
+      PAYOUT_THRESHOLD: "100000000"
+      LOG_LEVEL: debug
+      NODE_ENV: production
+      YESPOWER_CHECK_BIN: ./artifacts/api-server/bin/yespower-check
+    volumes:
+      - ./logs:/app/logs
+
+networks:
+  legacybtc-pool:
+    driver: bridge

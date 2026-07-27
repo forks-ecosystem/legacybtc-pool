@@ -1,0 +1,517 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: LegacyBTC Mining Pool API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: pool
+    description: Pool statistics and info
+  - name: miners
+    description: Miner-specific data
+  - name: blocks
+    description: Found blocks
+  - name: payouts
+    description: Payout history
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /pool/stats:
+    get:
+      operationId: getPoolStats
+      tags: [pool]
+      summary: Get overall pool statistics
+      responses:
+        "200":
+          description: Pool stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolStats"
+
+  /pool/dashboard:
+    get:
+      operationId: getPoolDashboard
+      tags: [pool]
+      summary: Get combined dashboard data (stats + recent blocks + recent payouts)
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolDashboard"
+
+  /pool/config:
+    get:
+      operationId: getPoolConfig
+      tags: [pool]
+      summary: Get pool connection config (stratum host, ports, fees)
+      responses:
+        "200":
+          description: Pool connection config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolConfig"
+
+  /pool/blocks:
+    get:
+      operationId: listBlocks
+      tags: [blocks]
+      summary: List found blocks
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: mode
+          in: query
+          schema: { type: string, enum: [solo, pplns] }
+      responses:
+        "200":
+          description: List of found blocks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockList"
+
+  /pool/payouts:
+    get:
+      operationId: listPayouts
+      tags: [payouts]
+      summary: List recent payouts
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: List of payouts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutList"
+
+  /pool/miners:
+    get:
+      operationId: listMiners
+      tags: [miners]
+      summary: List all active miners
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: List of miners
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MinerList"
+
+  /pool/miners/{address}:
+    get:
+      operationId: getMiner
+      tags: [miners]
+      summary: Get miner stats by address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Miner stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MinerStats"
+        "404":
+          description: Miner not found
+
+  /pool/miners/{address}/payouts:
+    get:
+      operationId: getMinerPayouts
+      tags: [miners]
+      summary: Get payout history for a specific miner
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Miner payouts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutList"
+
+  /pool/miners/{address}/shares:
+    get:
+      operationId: getMinerShares
+      tags: [miners]
+      summary: Get recent share history for a miner
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Miner share history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareList"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    PoolStats:
+      type: object
+      required:
+        - hashrate
+        - activeMiners
+        - activeWorkers
+        - totalBlocksFound
+        - soloBlocksFound
+        - pplnsBlocksFound
+        - networkDifficulty
+        - networkHashrate
+        - blockHeight
+        - lastBlockFoundAt
+        - totalPaidOut
+      properties:
+        hashrate:
+          type: number
+          description: Pool hashrate in H/s
+        activeMiners:
+          type: integer
+        activeWorkers:
+          type: integer
+        totalBlocksFound:
+          type: integer
+        soloBlocksFound:
+          type: integer
+        pplnsBlocksFound:
+          type: integer
+        networkDifficulty:
+          type: number
+        networkHashrate:
+          type: number
+        blockHeight:
+          type: integer
+        lastBlockFoundAt:
+          type: ["string", "null"]
+          format: date-time
+        totalPaidOut:
+          type: number
+          description: Total LBTC paid out to miners
+
+    PoolConfig:
+      type: object
+      required:
+        - stratumHost
+        - soloPort
+        - pplnsPort
+        - devFeePercent
+        - payoutThreshold
+        - coin
+        - ticker
+        - algorithm
+      properties:
+        stratumHost:
+          type: string
+        soloPort:
+          type: integer
+        pplnsPort:
+          type: integer
+        devFeePercent:
+          type: number
+        payoutThreshold:
+          type: number
+        coin:
+          type: string
+        ticker:
+          type: string
+        algorithm:
+          type: string
+
+    Block:
+      type: object
+      required:
+        - id
+        - height
+        - hash
+        - reward
+        - finderAddress
+        - foundAt
+        - confirmed
+        - mode
+        - devFee
+      properties:
+        id:
+          type: integer
+        height:
+          type: integer
+        hash:
+          type: string
+        reward:
+          type: number
+        finderAddress:
+          type: string
+        foundAt:
+          type: string
+          format: date-time
+        confirmed:
+          type: boolean
+        mode:
+          type: string
+          enum: [solo, pplns]
+        devFee:
+          type: number
+        txid:
+          type: ["string", "null"]
+
+    BlockList:
+      type: object
+      required: [blocks, total]
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Block"
+        total:
+          type: integer
+
+    Payout:
+      type: object
+      required:
+        - id
+        - address
+        - amount
+        - createdAt
+      properties:
+        id:
+          type: integer
+        address:
+          type: string
+        amount:
+          type: number
+        txid:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        blockId:
+          type: ["integer", "null"]
+
+    PayoutList:
+      type: object
+      required: [payouts, total]
+      properties:
+        payouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payout"
+        total:
+          type: integer
+
+    Miner:
+      type: object
+      required:
+        - address
+        - hashrate
+        - workerCount
+        - lastSeen
+        - totalShares
+        - validShares
+        - pendingBalance
+        - totalPaid
+      properties:
+        address:
+          type: string
+        hashrate:
+          type: number
+        workerCount:
+          type: integer
+        lastSeen:
+          type: string
+          format: date-time
+        totalShares:
+          type: integer
+        validShares:
+          type: integer
+        pendingBalance:
+          type: number
+        totalPaid:
+          type: number
+        mode:
+          type: ["string", "null"]
+          enum: [solo, pplns, null]
+
+    MinerList:
+      type: object
+      required: [miners, total]
+      properties:
+        miners:
+          type: array
+          items:
+            $ref: "#/components/schemas/Miner"
+        total:
+          type: integer
+
+    MinerStats:
+      type: object
+      required:
+        - address
+        - hashrate
+        - workerCount
+        - workers
+        - lastSeen
+        - totalShares
+        - validShares
+        - invalidShares
+        - pendingBalance
+        - totalPaid
+        - blocksFound
+        - mode
+      properties:
+        address:
+          type: string
+        hashrate:
+          type: number
+        workerCount:
+          type: integer
+        workers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Worker"
+        lastSeen:
+          type: string
+          format: date-time
+        totalShares:
+          type: integer
+        validShares:
+          type: integer
+        invalidShares:
+          type: integer
+        pendingBalance:
+          type: number
+        totalPaid:
+          type: number
+        blocksFound:
+          type: integer
+        mode:
+          type: ["string", "null"]
+          enum: [solo, pplns, null]
+
+    Worker:
+      type: object
+      required:
+        - name
+        - hashrate
+        - lastSeen
+        - validShares
+      properties:
+        name:
+          type: string
+        hashrate:
+          type: number
+        lastSeen:
+          type: string
+          format: date-time
+        validShares:
+          type: integer
+
+    Share:
+      type: object
+      required:
+        - id
+        - workerAddress
+        - workerName
+        - difficulty
+        - valid
+        - createdAt
+        - mode
+      properties:
+        id:
+          type: integer
+        workerAddress:
+          type: string
+        workerName:
+          type: string
+        difficulty:
+          type: number
+        valid:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        mode:
+          type: string
+          enum: [solo, pplns]
+
+    ShareList:
+      type: object
+      required: [shares, total]
+      properties:
+        shares:
+          type: array
+          items:
+            $ref: "#/components/schemas/Share"
+        total:
+          type: integer
+
+    PoolDashboard:
+      type: object
+      required: [stats, recentBlocks, recentPayouts, topMiners]
+      properties:
+        stats:
+          $ref: "#/components/schemas/PoolStats"
+        recentBlocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Block"
+        recentPayouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payout"
+        topMiners:
+          type: array
+          items:
+            $ref: "#/components/schemas/Miner"
