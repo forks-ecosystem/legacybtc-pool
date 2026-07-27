@@ -1,1 +1,9 @@
 /postgresql-data/
+/data/
+/replit.md
+/ecosystem.config.js
+/_run_pm2.sh
+/_port_check.sh
+/artifacts/api-server/.env
+/config/admin.json
+
