@@ -1,24 +1,15 @@
 import { useGetPoolDashboard } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatHashrate, formatCurrency, formatRelativeTime, formatDateTime, truncateAddress } from "@/lib/format";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCard } from "@/hooks/use-card";
 import { useKeyboardList } from "@/hooks/use-keyboard-list";
 import { Activity, Server, Pickaxe, Coins, Hash } from "lucide-react";
-import { useEffect } from "react";
 
 export default function Dashboard() {
   const { data: dashboard, isLoading, error } = useGetPoolDashboard();
-  const [, navigate] = useLocation();
-
-  useEffect(() => {
-    fetch("/api/admin/status")
-      .then(r => r.json())
-      .then(data => { if (!data.configured) navigate("/admin"); })
-      .catch(() => {});
-  }, []);
   const { open } = useCard();
 
   function blockCardContent(block: NonNullable<typeof dashboard>['recentBlocks'][number]) {

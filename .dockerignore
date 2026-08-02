@@ -19,4 +19,3 @@ artifacts/pool-ui/dist
 **/.gitkeep
 **/.tsbuildinfo
 **/tsconfig.tsbuildinfo
-postgresql-data

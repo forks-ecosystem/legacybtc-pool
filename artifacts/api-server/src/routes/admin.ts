@@ -70,6 +70,31 @@ function maskDbUrl(url: string): string {
   return url.replace(/:\/\/[^:]+:([^@]+)@/, (m, p) => m.replace(p, "****"));
 }
 
+router.get("/admin/wallet-balances", authMiddleware, async (_req, res) => {
+  try {
+    const { listUnspent, getBalance } = await import("../lib/rpc");
+    const [unspent, total] = await Promise.all([listUnspent(), getBalance()]);
+    const devWallet = process.env["DEV_WALLET"] ?? "";
+    const feeAddress = process.env["DEV_FEE_ADDRESS"] ?? "";
+    const sums: Record<string, number> = {};
+    let spendable = 0;
+    for (const u of unspent) {
+      sums[u.address ?? ""] = (sums[u.address ?? ""] ?? 0) + u.amount;
+      if (u.safe_to_spend) spendable += u.amount;
+    }
+    res.json({
+      total,
+      spendable,
+      addresses: {
+        [devWallet]: { label: "Dev Wallet", address: devWallet, balance: sums[devWallet] ?? 0 },
+        [feeAddress]: { label: "Fee Address", address: feeAddress, balance: sums[feeAddress] ?? 0 },
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/admin/dashboard", authMiddleware, async (_req, res) => {
   const env = process.env;
   res.json({

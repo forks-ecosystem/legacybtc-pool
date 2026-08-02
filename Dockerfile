@@ -3,7 +3,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 WORKDIR /app
 
 FROM base AS deps
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY lib/db/package.json lib/db/
 COPY packages/api-zod/package.json packages/api-zod/
 COPY packages/api-client-react/package.json packages/api-client-react/
@@ -14,8 +14,10 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app .
-COPY . .
-RUN pnpm install --frozen-lockfile
+COPY lib lib
+COPY packages packages
+COPY artifacts artifacts
+COPY config config
 RUN pnpm run typecheck:libs
 RUN PORT=3001 BASE_PATH=/ pnpm --filter @workspace/pool-ui run build 2>&1 || echo "pool-ui build skipped (pre-existing type errors)"
 RUN pnpm --filter @workspace/api-server run build

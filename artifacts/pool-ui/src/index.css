@@ -118,11 +118,12 @@
 .sidebar-link {
   position: relative;
 }
+.sidebar-link-active {
+  color: hsl(25 100% 55%);
+}
 .sidebar-link:focus-visible {
   outline: none;
-}
-.sidebar-link:focus-visible:not(.sidebar-link-active) {
-  background: linear-gradient(to left, #358 1%, #111);
+  background: linear-gradient(to left, #335588 1%, #111111);
 }
 
 .welcome-divider {

@@ -15,9 +15,9 @@ const SECTIONS: Record<string, { label: string; icon: string; desc: string; fiel
     ],
   },
   database: {
-    label: "Database", icon: "🗄️", desc: "PostgreSQL connection (Docker)",
+    label: "Database", icon: "🗄️", desc: "PostgreSQL connection",
     fields: [
-      { key: "DATABASE_URL", label: "Connection String", desc: "Protocol: postgresql | Host: 127.0.0.1 | Port: 5433 | Database: btc_pool | User: btcpool", placeholder: "postgresql://btcpool:btcpass123@127.0.0.1:5433/btc_pool" },
+      { key: "DATABASE_URL", label: "Connection String", desc: "postgresql://user:pass@host:port/database", placeholder: "postgresql://btcpool:btcpass123@127.0.0.1:5433/btc_pool" },
     ],
   },
   wallet: {
@@ -383,11 +383,9 @@ function Admin() {
                   {saveMsg && <span className={`text-sm font-mono ${saveMsg === "Saved" ? "text-green-500" : "text-red-500"}`}>{saveMsg}</span>}
                 </div>
 
-                <div className="mt-10 p-4 bg-muted border border-border rounded font-mono text-xs space-y-2">
-                  <p className="text-muted-foreground">Node Download</p>
-                  <a href="https://github.com/legacybtc/LegacyCore" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all block">https://github.com/legacybtc/LegacyCore</a>
-                  <p className="text-muted-foreground pt-1 border-t border-border/50">Build script</p>
-                  <code className="text-primary break-all">/home/coin/legacybtc-pool/_git_LegacyCore.sh</code>
+                <div className="mt-10 p-4 bg-muted border border-border rounded font-mono text-xs">
+                  <p className="text-muted-foreground mb-2">Node Download</p>
+                  <a href="https://github.com/legacybtc/LegacyCore" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">https://github.com/legacybtc/LegacyCore</a>
                 </div>
               </div>
             )}

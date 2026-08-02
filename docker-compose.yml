@@ -2,6 +2,11 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: btcpool
       POSTGRES_PASSWORD: btcpass123
@@ -11,7 +16,7 @@ services:
     networks:
       - legacybtc-pool
     volumes:
-      - /home/coin/legacybtc-pool/postgresql-data:/var/lib/postgresql/data
+      - /srv/legacybtc-pool/postgres:/var/lib/postgresql/data
       - ./docker-init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U btcpool -d btc_pool"]
@@ -23,6 +28,11 @@ services:
     build: .
     restart: unless-stopped
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       postgres:
         condition: service_healthy

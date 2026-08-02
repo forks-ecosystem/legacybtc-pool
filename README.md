@@ -25,7 +25,7 @@ A solo and PPLNS mining pool for [LegacyCoin](https://github.com/forks-ecosystem
 | Validation | Zod 4 |
 | Build | esbuild (api-server), Vite (pool-ui) |
 | Package Manager | pnpm workspaces |
-| Process Manager | systemd / PM2 |
+| Deployment | Docker + docker-compose |
 
 ## Architecture
 
@@ -43,7 +43,7 @@ legacybtc-pool/
 ├── config/
 │   ├── admin.json      Admin credentials
 │   └── pool.env        Pool runtime config
-├── ecosystem.config.js PM2 config
+├── docker-compose.yml  Docker orchestration (postgres + app)
 └── bin/                yespower-check binary
 ```
 
@@ -54,59 +54,66 @@ The following helper scripts are located in the project root:
 | Script | Description |
 |--------|-------------|
 | [`_git_LegacyCore.sh`](./_git_LegacyCore.sh) | Clone and build the LegacyCore (LBTC) node from source. Run this to get a fully compiled `legacoind` binary. |
-| [`_set_all.sh`](./_set_all.sh) | Set file ownership and permissions for the pool directory. Useful when running the pool under a dedicated system user or after a Docker rebuild. |
+| [`_set_all.sh`](./_set_all.sh) | Set file ownership and permissions for the pool directory. Useful when running the pool under a dedicated system user. |
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 24+
-- pnpm 10+
-- PostgreSQL (or use Docker)
-- [LegacyCore](https://github.com/forks-ecosystem/LegacyCore) node running with cookie auth
+- Docker + Docker Compose
+- [LegacyCore](https://github.com/forks-ecosystem/LegacyCore) node running on the host (the pool connects via `NODE_RPC_HOST` / `NODE_RPC_PORT`)
 
-### Install & Build
+### Run via Docker (recommended)
+
+The pool runs fully in Docker — PostgreSQL + the API/Stratum server. It uses `network_mode: host` so it can reach the LegacyCore node and the local postgres.
 
 ```bash
-pnpm install
-pnpm run build
+docker compose up -d --build
 ```
+
+- API + dashboard: http://localhost:3001
+- Stratum PPLNS: `stratum+tcp://127.0.0.1:3333`
+- Stratum SOLO: `stratum+tcp://127.0.0.1:3331`
 
 ### Configure
 
-Copy or symlink the environment config:
+Runtime settings are passed via environment variables in [`docker-compose.yml`](./docker-compose.yml):
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | API/dashboard port |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `DEV_WALLET` | Pool's dev/reward wallet (validated against the node on startup) |
+| `DEV_FEE_ADDRESS` | Address receiving the 5% dev fee |
+| `NODE_RPC_HOST` / `NODE_RPC_PORT` | LegacyCore node RPC endpoint |
+| `NODE_RPC_USER` / `NODE_RPC_PASS` | Node RPC credentials |
+| `PPLNS_WINDOW` | Sliding window of shares for PPLNS |
+| `PAYOUT_THRESHOLD` | Minimum payout threshold (base units) |
+
+An admin panel can also persist overrides to `config/pool.env` (mounted via `./config`).
+
+### Common commands
 
 ```bash
-cp config/pool.env artifacts/api-server/.env
+docker compose up -d --build   # build & start
+docker compose logs -f app     # follow logs
+docker compose ps              # status
+docker compose restart app     # restart the API
+docker compose down            # stop (keeps postgres data)
 ```
 
-Edit `artifacts/api-server/.env` to match your node and database:
+PostgreSQL data lives in `/srv/legacybtc-pool/postgres` (outside the project, kept out of the Docker build context).
 
-```env
-PORT=3001
-DATABASE_URL=postgresql://user:pass@host:5432/btc_pool
-DEV_WALLET=LfSbSV7WDgfTvFC9vY6s7J4UMircJ9UCFT
-NODE_RPC_HOST=127.0.0.1
-NODE_RPC_PORT=19556
-NODE_RPC_COOKIE=/path/to/.cookie
-PPLNS_WINDOW=100000
-PAYOUT_THRESHOLD=100000000
-STRATUM_SOLO_PORT=3331
-STRATUM_PPLNS_PORT=3333
-YESPOWER_CHECK_BIN=/path/to/yespower-check
-```
-
-### Run
+### Memory-friendly rebuild
 
 ```bash
-node --enable-source-maps ./artifacts/api-server/dist/index.mjs
+sudo chmod -R o+rX /srv/legacybtc-pool/postgres   # one-time, if postgres files are 70:root
+./_rebuild.sh                                     # stop → remove old image → rebuild → start
 ```
 
-Or via PM2:
+## Log Cleanup
 
-```bash
-pm2 start ecosystem.config.js
-```
+The API writes JSON logs to stdout — collect them with Docker's logging driver (default: json-file, max-size configurable in `docker-compose.yml`).
 
 ## Mining Modes
 

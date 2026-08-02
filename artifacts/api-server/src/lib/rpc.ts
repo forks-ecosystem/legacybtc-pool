@@ -155,3 +155,21 @@ export interface ValidateAddressResult {
 export async function validateAddress(address: string): Promise<ValidateAddressResult> {
   return rpcCall("validateaddress", [address]) as Promise<ValidateAddressResult>;
 }
+
+export interface Utxo {
+  txid: string;
+  vout: number;
+  address?: string;
+  amount: number;
+  confirmations: number;
+  coinbase?: boolean;
+  safe_to_spend?: boolean;
+}
+
+export async function listUnspent(minconf = 0, maxconf = 9999999): Promise<Utxo[]> {
+  return rpcCall("listunspent", [minconf, maxconf]) as Promise<Utxo[]>;
+}
+
+export async function getBalance(): Promise<number> {
+  return rpcCall("getbalance", []) as Promise<number>;
+}

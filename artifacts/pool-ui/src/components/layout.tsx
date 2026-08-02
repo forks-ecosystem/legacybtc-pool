@@ -1,7 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Users, Box, ArrowRightLeft, Terminal, Cpu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CardPanel } from "@/components/card-panel";
 import { useCard } from "@/hooks/use-card";
 import { useEffect, useState, useRef } from "react";
@@ -49,11 +48,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isCardOpen && !isAdmin) {
-        const saved = focusedIdxRef.current;
+        const savedEl = document.activeElement as HTMLElement;
         setIsCollapsed(prev => !prev);
         requestAnimationFrame(() => {
-          if (saved >= 0) focusNavItem(saved);
-          else focusActiveNavItem();
+          if (navRef.current?.contains(savedEl)) {
+            savedEl.focus();
+          }
         });
       }
     };
@@ -73,6 +73,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (!navRef.current) return -1;
     const links = navRef.current.querySelectorAll('a');
     return Array.from(links).findIndex(el => el === document.activeElement);
+  };
+
+  const focusRightPanel = () => {
+    setTimeout(() => {
+      const first = document.querySelector<HTMLElement>('main [data-list-item]');
+      first?.focus();
+    }, 50);
   };
 
   const handleNavKeyDown = (e: React.KeyboardEvent) => {
@@ -134,19 +141,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           const isActive = location === item.href || (location.startsWith(item.href) && item.href !== "/");
           const link = (
             <Link key={item.href} href={item.href} className={`sidebar-link block focus-visible:outline-none ${isActive ? 'sidebar-link-active' : ''}`}>
-              <div onClick={closeCard} className={`flex items-center gap-3 px-4 py-3 transition-colors font-mono text-sm border-l-2 ${isActive ? "bg-primary/5 text-primary border-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted border-transparent"} ${isCollapsed ? 'justify-center px-0 mx-2' : ''}`}>
+              <div onClick={() => { closeCard(); focusRightPanel(); }} className={`flex items-center gap-3 px-4 py-3 transition-colors font-mono text-sm ${isCollapsed ? 'justify-center px-0 mx-2' : ''}`}>
                 {item.icon}
                 {!isCollapsed && item.label}
               </div>
             </Link>
           );
           if (isCollapsed) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>{item.label}</TooltipContent>
-              </Tooltip>
-            );
+            return link;
           }
           return link;
         })}
