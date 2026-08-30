@@ -158,9 +158,7 @@ async function refreshJob(): Promise<void> {
     // Build coinbase parts (without extranonce) and merkle branch for stratum notify
     // Use pool address for coinbase outputs — pool handles miner payouts via PPLNS/SOLO
     const poolScript = addressToScript(DEV_WALLET);
-    // Coinbase-only block: subtract mempool fees from coinbase value since we don't include those txs
-    const totalFees = template.transactions.reduce((sum, tx) => sum + (tx.fee || 0), 0);
-    const subsidy = template.coinbasevalue - totalFees;
+    const subsidy = template.coinbasevalue;
     const parts = buildCoinbaseParts(template.height, subsidy, poolScript, 0, poolScript);
     const dummyExtranonce1 = "ff000000";
     const dummyExtranonce2 = "00000000";
@@ -170,8 +168,10 @@ async function refreshJob(): Promise<void> {
       Buffer.from(dummyExtranonce2, "hex"),
       parts.coinb2,
     ]);
-    const txHashes: Buffer[] = [sha256d(dummyCoinbase)];
-    // Coinbase-only: skip mempool txs to avoid bad-txns-inputs-missingorspent
+    const txHashes: Buffer[] = [
+      sha256d(dummyCoinbase),
+      ...template.transactions.map((tx) => sha256d(Buffer.from(tx.data, "hex"))),
+    ];
     const merkleBranch = buildMerkleBranch(txHashes);
 
     const newJob: Job = {

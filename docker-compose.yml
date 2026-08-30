@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:15-alpine
+    container_name: legacybtc-pool-postgres
     restart: unless-stopped
     logging:
       driver: json-file
@@ -11,8 +12,6 @@ services:
       POSTGRES_USER: btcpool
       POSTGRES_PASSWORD: btcpass123
       POSTGRES_DB: btc_pool
-    ports:
-      - "5433:5432"
     networks:
       - legacybtc-pool
     volumes:
@@ -26,6 +25,7 @@ services:
 
   app:
     build: .
+    container_name: legacybtc-pool-app
     restart: unless-stopped
     network_mode: host
     logging:
@@ -39,7 +39,7 @@ services:
     environment:
       PORT: "3001"
       DATABASE_URL: postgresql://btcpool:btcpass123@127.0.0.1:5433/btc_pool
-      DEV_WALLET: "${DEV_WALLET:-LiLaCdP4rdtCp7kBtxTe9HyTcZjjDyjS7U}"
+      DEV_WALLET: "${DEV_WALLET:-LfSK7LDYVW2cD3UA8RuPxLAe64kxTWShJW}"
       DEV_FEE_ADDRESS: "${DEV_FEE_ADDRESS:-LXpca23xLyUbsEr3byCZFJyrQ7dYBGXSm3}"
       NODE_RPC_HOST: "127.0.0.1"
       NODE_RPC_PORT: "19556"

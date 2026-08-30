@@ -230,10 +230,11 @@ function buildBlock(
   nonce: string,
   nTimeHex?: string,
 ): { blockHex: string; headerHash: Buffer } {
-  // Coinbase-only block: skip mempool transactions to avoid
-  // bad-txns-inputs-missingorspent errors from stale mempool txs
-  const txHashes: Buffer[] = [sha256d(coinbaseTx)];
-  const txBuffers: Buffer[] = [coinbaseTx];
+  const txBuffers: Buffer[] = [
+    coinbaseTx,
+    ...template.transactions.map((tx) => Buffer.from(tx.data, "hex")),
+  ];
+  const txHashes: Buffer[] = txBuffers.map(sha256d);
   const merkleRoot = buildMerkleTree(txHashes);
 
   // Use miner's nTime if provided, otherwise fall back to template.curtime
