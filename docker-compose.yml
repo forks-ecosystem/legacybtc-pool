@@ -8,17 +8,15 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    environment:
-      POSTGRES_USER: btcpool
-      POSTGRES_PASSWORD: btcpass123
-      POSTGRES_DB: btc_pool
-    networks:
-      - legacybtc-pool
+    env_file:
+      - ./config/pool.env
+    network_mode: host
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=5451"]
     volumes:
       - /srv/legacybtc-pool/postgres:/var/lib/postgresql/data
       - ./docker-init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U btcpool -d btc_pool"]
+      test: ["CMD-SHELL", "pg_isready -p 5451 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -36,23 +34,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      PORT: "3001"
-      DATABASE_URL: postgresql://btcpool:btcpass123@127.0.0.1:5433/btc_pool
-      DEV_WALLET: "${DEV_WALLET:-LfSK7LDYVW2cD3UA8RuPxLAe64kxTWShJW}"
-      DEV_FEE_ADDRESS: "${DEV_FEE_ADDRESS:-LXpca23xLyUbsEr3byCZFJyrQ7dYBGXSm3}"
-      NODE_RPC_HOST: "127.0.0.1"
-      NODE_RPC_PORT: "19556"
-      NODE_RPC_USER: "coin"
-      NODE_RPC_PASS: "coin"
-      PPLNS_WINDOW: "100000"
-      PAYOUT_THRESHOLD: "100000000"
-      LOG_LEVEL: debug
-      NODE_ENV: production
-      YESPOWER_CHECK_BIN: ./artifacts/api-server/bin/yespower-check
+    env_file:
+      - ./config/pool.env
     volumes:
       - ./logs:/app/logs
-
-networks:
-  legacybtc-pool:
-    driver: bridge
+      - ./config:/app/config
