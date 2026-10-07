@@ -66,9 +66,9 @@ router.get("/pool/stats", async (req, res): Promise<void> => {
     // DB aggregates
     const [blockStats] = await db
       .select({
-        total: count(),
-        solo: sql<number>`sum(case when mode = 'solo' then 1 else 0 end)::int`,
-        pplns: sql<number>`sum(case when mode = 'pplns' then 1 else 0 end)::int`,
+        total: sql<number>`count(distinct height)::int`,
+        solo: sql<number>`count(distinct height) filter (where mode = 'solo')::int`,
+        pplns: sql<number>`count(distinct height) filter (where mode = 'pplns')::int`,
         lastFound: sql<string | null>`max(found_at)`,
       })
       .from(blocksTable);
@@ -157,9 +157,9 @@ router.get("/pool/dashboard", async (req, res): Promise<void> => {
     // DB aggregates
     const [blockStats] = await db
       .select({
-        total: count(),
-        solo: sql<number>`sum(case when mode = 'solo' then 1 else 0 end)::int`,
-        pplns: sql<number>`sum(case when mode = 'pplns' then 1 else 0 end)::int`,
+        total: sql<number>`count(distinct height)::int`,
+        solo: sql<number>`count(distinct height) filter (where mode = 'solo')::int`,
+        pplns: sql<number>`count(distinct height) filter (where mode = 'pplns')::int`,
         lastFound: sql<string | null>`max(found_at)`,
       })
       .from(blocksTable);
@@ -180,7 +180,17 @@ router.get("/pool/dashboard", async (req, res): Promise<void> => {
       .select()
       .from(blocksTable)
       .orderBy(desc(blocksTable.foundAt))
-      .limit(5);
+      .limit(10);
+
+    // dedup: per height, prefer confirmed, else keep latest
+    const seenBlocks = new Map<number, typeof recentBlocksRaw[0]>();
+    for (const row of recentBlocksRaw) {
+      const existing = seenBlocks.get(row.height);
+      if (!existing || row.confirmed || (!existing.confirmed && row.foundAt > existing.foundAt)) {
+        seenBlocks.set(row.height, row);
+      }
+    }
+    const recentBlocks = [...seenBlocks.values()].slice(0, 5);
 
     const recentPayoutsRaw = await db
       .select()
@@ -256,7 +266,7 @@ router.get("/pool/dashboard", async (req, res): Promise<void> => {
         lastBlockFoundAt: blockStats?.lastFound ?? null,
         totalPaidOut: toCoins(Number(payoutSum?.total ?? 0)),
       },
-      recentBlocks: recentBlocksRaw.map(b => ({
+      recentBlocks: recentBlocks.map(b => ({
         id: b.id,
         height: b.height,
         hash: b.hash,
@@ -304,45 +314,45 @@ router.get("/pool/blocks", async (req, res): Promise<void> => {
     const offset = query.success ? (query.data.offset ?? 0) : 0;
     const mode = query.success ? query.data.mode : undefined;
 
-    const whereClause = mode ? eq(blocksTable.mode, mode) : undefined;
-
-    let [rows, [{ total }]] = await Promise.all([
-      whereClause
-        ? db.select().from(blocksTable).where(whereClause).orderBy(desc(blocksTable.foundAt)).limit(limit).offset(offset)
-        : db.select().from(blocksTable).orderBy(desc(blocksTable.foundAt)).limit(limit).offset(offset),
-      whereClause
-        ? db.select({ total: count() }).from(blocksTable).where(whereClause)
-        : db.select({ total: count() }).from(blocksTable),
+    // Dedup per height in SQL (prefer confirmed, else latest found), then paginate.
+    // Note: no DISTINCT ON in this drizzle build, so use row_number() window.
+    const modeWhere = mode ? sql`WHERE mode = ${mode}` : sql``;
+    const [bResult, tResult] = await Promise.all([
+      db.execute(sql`
+        SELECT id, height, hash, reward, finder_address, found_at, confirmed, mode, dev_fee, txid, submit_result
+        FROM (
+          SELECT *, row_number() OVER (PARTITION BY height ORDER BY confirmed DESC, found_at DESC) AS rn
+          FROM blocks
+          ${modeWhere}
+        ) d
+        WHERE rn = 1
+        ORDER BY found_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `),
+      db.execute(sql`
+        SELECT count(DISTINCT height) AS total FROM blocks ${modeWhere}
+      `),
     ]);
+    const rows = bResult.rows ?? (bResult as any);
+    const total = Number(((tResult.rows ?? tResult)[0] as any).total);
 
-    // dedup: per height, prefer confirmed, else keep latest
-    const seen = new Map<number, typeof rows[0]>();
-    for (const row of rows) {
-      const existing = seen.get(row.height);
-      if (!existing || row.confirmed || (!existing.confirmed && row.foundAt > existing.foundAt)) {
-        seen.set(row.height, row);
-      }
-    }
-    rows = [...seen.values()];
-    total = rows.length;
-
-    const result = ListBlocksResponse.parse({
-      blocks: rows.map(b => ({
+    const parsed = ListBlocksResponse.parse({
+      blocks: rows.map((b: any) => ({
         id: b.id,
         height: b.height,
         hash: b.hash,
-        reward: toCoins(b.reward),
-        finderAddress: b.finderAddress,
-        foundAt: b.foundAt.toISOString(),
+        reward: toCoins(Number(b.reward)),
+        finderAddress: b.finder_address,
+        foundAt: new Date(b.found_at).toISOString(),
         confirmed: b.confirmed,
-        mode: b.mode as "solo" | "pplns",
-        devFee: toCoins(b.devFee),
-        txid: b.txid,
+        mode: (b.mode as "solo" | "pplns") ?? "pplns",
+        devFee: toCoins(Number(b.dev_fee)),
+        txid: b.txid ?? null,
       })),
       total,
     });
 
-    res.json(result);
+    res.json(parsed);
   } catch (err) {
     req.log.error({ err }, "listBlocks failed");
     res.status(500).json({ error: "Internal server error" });
@@ -527,7 +537,7 @@ router.get("/pool/miners/:address", async (req, res): Promise<void> => {
       .where(and(eq(payoutsTable.address, address), sql`${payoutsTable.txid} IS NULL`));
 
     const [blockCount] = await db
-      .select({ total: count() })
+      .select({ total: sql<number>`count(distinct height)::int` })
       .from(blocksTable)
       .where(eq(blocksTable.finderAddress, address));
 

@@ -224,16 +224,35 @@ function buildMerkleBranch(txHashes: Buffer[]): string[] {
   return branch;
 }
 
+// Decodes template transactions in the order the node returned them (already
+// topologically sorted, see template `depends`). Returns null when any entry is
+// unusable so the caller can fall back to a coinbase-only block instead of
+// building a block that cannot be serialized.
+function templateTxBuffers(template: BlockTemplate): Buffer[] | null {
+  const out: Buffer[] = [];
+  for (const tx of template.transactions ?? []) {
+    const data = tx?.data;
+    if (typeof data !== "string" || data.length === 0 || data.length % 2 !== 0) return null;
+    if (!/^[0-9a-fA-F]+$/.test(data)) return null;
+    const buf = Buffer.from(data, "hex");
+    if (buf.length !== data.length / 2) return null;
+    out.push(buf);
+  }
+  return out;
+}
+
 function buildBlock(
   template: BlockTemplate,
   coinbaseTx: Buffer,
   nonce: string,
   nTimeHex?: string,
+  includeTransactions = true,
 ): { blockHex: string; headerHash: Buffer } {
-  const txBuffers: Buffer[] = [
-    coinbaseTx,
-    ...template.transactions.map((tx) => Buffer.from(tx.data, "hex")),
-  ];
+  // Include mempool transactions so the block actually settles them. A stale
+  // template may still be rejected with bad-txns-*; that risk is bounded by the
+  // 20s job refresh instead of permanently mining empty blocks.
+  const mempoolTxs = includeTransactions ? templateTxBuffers(template) : null;
+  const txBuffers: Buffer[] = mempoolTxs ? [coinbaseTx, ...mempoolTxs] : [coinbaseTx];
   const txHashes: Buffer[] = txBuffers.map(sha256d);
   const merkleRoot = buildMerkleTree(txHashes);
 
@@ -262,4 +281,4 @@ function buildBlock(
   return { blockHex: fullBlock.toString("hex"), headerHash };
 }
 
-export { buildBlock, buildCoinbaseParts, buildMerkleTree, buildMerkleBranch, addressToScript, sha256d };
+export { buildBlock, buildCoinbaseParts, buildMerkleTree, buildMerkleBranch, addressToScript, sha256d, templateTxBuffers };

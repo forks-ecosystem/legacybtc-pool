@@ -211,10 +211,10 @@ export declare const blocksTable: import("drizzle-orm/pg-core").PgTableWithColum
     dialect: "pg";
 }>;
 export declare const insertBlockSchema: z.ZodObject<{
+    mode: z.ZodOptional<z.ZodString>;
     height: z.ZodInt;
     hash: z.ZodString;
     reward: z.ZodOptional<z.ZodInt>;
-    mode: z.ZodOptional<z.ZodString>;
     finderAddress: z.ZodString;
     foundAt: z.ZodOptional<z.ZodDate>;
     confirmed: z.ZodOptional<z.ZodBoolean>;

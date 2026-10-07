@@ -33,7 +33,7 @@ export default function Blocks() {
             </tr>
             <tr className="border-b border-border">
               <td className="text-muted-foreground py-1.5 pr-4 align-top">Reward</td>
-              <td className="py-1.5 text-right font-semibold">{formatCurrency(block.reward)} LBTC</td>
+              <td className="py-1.5 text-right font-semibold">{formatCurrency(block.reward)}</td>
             </tr>
             <tr className="border-b border-border">
               <td className="text-muted-foreground py-1.5 pr-4 align-top">Mode</td>
@@ -145,7 +145,7 @@ export default function Blocks() {
                         </Badge>
                       </TableCell>
                       <TableCell className="font-mono">
-                        {formatCurrency(block.reward)} LBTC
+                        {formatCurrency(block.reward)}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {truncateAddress(block.hash)}

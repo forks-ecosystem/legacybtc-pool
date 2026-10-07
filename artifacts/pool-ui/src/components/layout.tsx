@@ -118,7 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         {!isCollapsed && (
           <div>
-            <h1 className="font-bold text-lg leading-tight tracking-tight text-foreground font-mono">LBTC POOL</h1>
+            <h1 className="font-bold text-lg leading-tight tracking-tight text-foreground font-mono">POOL</h1>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 ${health ? 'bg-primary' : 'bg-muted-foreground animate-pulse'} rounded-none shadow-[0_0_8px_hsl(var(--primary))]`} />
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">{health ? 'Network Online' : 'Connecting...'}</span>

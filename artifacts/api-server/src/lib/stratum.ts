@@ -15,7 +15,7 @@ import { sql } from "drizzle-orm";
 import { poolState } from "./pool-state";
 import { getBlockTemplate, submitBlock, type BlockTemplate } from "./rpc";
 import { logger } from "./logger";
-import { buildBlock, buildCoinbaseParts, buildMerkleTree, buildMerkleBranch, addressToScript, sha256d } from "./block-builder";
+import { buildBlock, buildCoinbaseParts, buildMerkleTree, buildMerkleBranch, addressToScript, sha256d, templateTxBuffers } from "./block-builder";
 
 const execFileAsync = promisify(execFile);
 const YESPOWER_CHECK = process.env["YESPOWER_CHECK_BIN"] ?? "./bin/yespower-check";
@@ -53,6 +53,9 @@ function hashToBlockId(hashHex: string): string {
 
 const DEV_FEE = parseFloat(process.env["DEV_FEE"] ?? "0.05"); // 5%
 const DEV_WALLET = process.env["DEV_WALLET"] ?? "LBTCdevXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+// Mine mempool transactions into pool blocks. Set POOL_INCLUDE_MEMPOOL_TX=0 to
+// fall back to coinbase-only blocks without a rebuild.
+const POOL_INCLUDE_MEMPOOL_TX = process.env["POOL_INCLUDE_MEMPOOL_TX"] !== "0";
 const PPLNS_WINDOW = parseInt(process.env["PPLNS_WINDOW"] ?? "100000"); // last N shares
 const PAYOUT_THRESHOLD_BASE = parseInt(process.env["PAYOUT_THRESHOLD"] ?? "100000000"); // 1 LBTC in base units
 
@@ -74,6 +77,8 @@ interface Job {
   coinb2: string;
   merkleBranch: string[];
   createdAt: number;
+  includeTransactions: boolean;
+  txCount: number;
 }
 let currentJob: Job | null = null;
 const recentJobs = new Map<string, Job>(); // jobId -> Job, keeps last 5 jobs
@@ -158,7 +163,15 @@ async function refreshJob(): Promise<void> {
     // Build coinbase parts (without extranonce) and merkle branch for stratum notify
     // Use pool address for coinbase outputs — pool handles miner payouts via PPLNS/SOLO
     const poolScript = addressToScript(DEV_WALLET);
-    const subsidy = template.coinbasevalue;
+    // Include mempool transactions so found blocks actually settle them. When they
+    // are included the coinbase may claim the full coinbasevalue (subsidy + fees);
+    // only the coinbase-only fallback has to give the fees back.
+    const mempoolTxs = POOL_INCLUDE_MEMPOOL_TX ? templateTxBuffers(template) : null;
+    const includeTransactions = mempoolTxs !== null && mempoolTxs.length > 0;
+    const totalFees = includeTransactions
+      ? 0
+      : (template.transactions ?? []).reduce((sum, tx) => sum + (tx.fee || 0), 0);
+    const subsidy = template.coinbasevalue - totalFees;
     const parts = buildCoinbaseParts(template.height, subsidy, poolScript, 0, poolScript);
     const dummyExtranonce1 = "ff000000";
     const dummyExtranonce2 = "00000000";
@@ -168,10 +181,8 @@ async function refreshJob(): Promise<void> {
       Buffer.from(dummyExtranonce2, "hex"),
       parts.coinb2,
     ]);
-    const txHashes: Buffer[] = [
-      sha256d(dummyCoinbase),
-      ...template.transactions.map((tx) => sha256d(Buffer.from(tx.data, "hex"))),
-    ];
+    const txHashes: Buffer[] = [sha256d(dummyCoinbase)];
+    for (const buf of mempoolTxs ?? []) txHashes.push(sha256d(buf));
     const merkleBranch = buildMerkleBranch(txHashes);
 
     const newJob: Job = {
@@ -183,6 +194,8 @@ async function refreshJob(): Promise<void> {
       coinb2: parts.coinb2.toString("hex"),
       merkleBranch,
       createdAt: Date.now(),
+      includeTransactions,
+      txCount: mempoolTxs?.length ?? 0,
     };
     // Keep current job in cache for stale shares, then replace
     if (currentJob) {
@@ -194,7 +207,7 @@ async function refreshJob(): Promise<void> {
       }
     }
     currentJob = newJob;
-//my-add    logger.debug({ height: template.height, jobId: currentJob.id }, "1. New job");
+    logger.debug({ height: template.height, jobId: currentJob.id, txCount: newJob.txCount, includeTransactions }, "1. New job");
     broadcastJob();
   } catch (err) {
     logger.warn({ err }, "Failed to fetch block template");
@@ -262,7 +275,7 @@ async function handleShare(client: MinerClient, jobId: string, nonce: string, ex
       Buffer.from(extraNonce2 ?? "00000000", "hex"),
       Buffer.from(job.coinb2, "hex"),
     ]);
-    const { blockHex, headerHash } = buildBlock(template, coinbaseTx, nonce, nTime);
+    const { blockHex, headerHash } = buildBlock(template, coinbaseTx, nonce, nTime, job.includeTransactions);
     const headerHex = blockHex.slice(0, 160);
 
     const powHash = await computeYespowerHash(headerHex);
@@ -375,6 +388,14 @@ async function checkBlockFound(
           await db.update(blocksTable).set({ confirmed: false, submitResult: result }).where(sql`id = ${existingBlock.id}`);
           logger.info({ blockId: blockId.slice(0, 16) + "...", height: template.height }, "Block marked as orphan");
         }
+        return;
+      }
+
+      // Пропускаем запоздавшие находки на высоте, где уже есть подтверждённый блок
+      const [confirmedAtHeight] = await db.select({ hash: blocksTable.hash }).from(blocksTable)
+        .where(sql`height = ${template.height} AND confirmed = true`).limit(1);
+      if (confirmedAtHeight) {
+        logger.info({ blockId: blockId.slice(0, 16) + "...", height: template.height, confirmedHash: confirmedAtHeight.hash.slice(0, 16) + "..." }, "skipping stale find");
         return;
       }
 

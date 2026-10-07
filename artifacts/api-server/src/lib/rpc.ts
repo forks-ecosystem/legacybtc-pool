@@ -82,7 +82,9 @@ export async function submitBlock(blockHex: string): Promise<string | null> {
   try {
     const result = await rpcCall("submitblock", [blockHex]);
     logger.info({ submitResult: result }, "submitblock RPC response");
-    return result as string | null;
+    // Node omits `result` on success → undefined. Normalize to null so callers
+    // treat a winning block as accepted (rpcAccepted) instead of rejected.
+    return result === undefined ? null : (result as string | null);
   } catch (err) {
     logger.error({ err }, "submitblock failed");
     return "failed";
@@ -172,4 +174,19 @@ export async function listUnspent(minconf = 0, maxconf = 9999999): Promise<Utxo[
 
 export async function getBalance(): Promise<number> {
   return rpcCall("getbalance", []) as Promise<number>;
+}
+
+export interface AddressBalance {
+  address: string;
+  balance: number;
+  balance_base_units: number;
+  received: number;
+  received_base_units: number;
+  addressindex_confirmed_only?: boolean;
+}
+
+// Баланс произвольного адреса из адрес-индекса. listunspent не подходит:
+// он покрывает только UTXO кошельков ноды, а dev/fee адреса могут ей не принадлежать.
+export async function getAddressBalance(address: string): Promise<AddressBalance> {
+  return rpcCall("getaddressbalance", [address]) as Promise<AddressBalance>;
 }

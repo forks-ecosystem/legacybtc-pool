@@ -5,4 +5,5 @@
 /_port_check.sh
 /artifacts/api-server/.env
 /config/admin.json
+/config/.reload-app
 

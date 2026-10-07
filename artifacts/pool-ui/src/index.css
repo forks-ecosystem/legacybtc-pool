@@ -97,6 +97,11 @@
   --input: 0 0% 15%;
   --ring: 32 100% 50%;
   --badge-outline: hsl(0 0% 45%);
+  --panel2: #1a1a1a;
+}
+
+thead th {
+  background: linear-gradient(to right, var(--panel2), #000);
 }
 
 @layer base {
@@ -112,6 +117,12 @@
 @layer utilities {
   .pt-20 {
     padding-top: 30px;
+  }
+
+  .text-sm {
+    font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height));
+    width: 350px;
   }
 }
 
